@@ -1,0 +1,40 @@
+name: render-clip
+
+on:
+  repository_dispatch:
+    types: [render]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    env:
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download composite image from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          IMAGE_KEY: ${{ github.event.client_payload.image_key }}
+        run: |
+          echo "Downloading $IMAGE_KEY"
+          aws s3 cp "s3://$R2_BUCKET/$IMAGE_KEY" in.jpg --endpoint-url "$R2_ENDPOINT"
+
+      - name: Render 18s clip (push in / breathe / pull out + BGM + watermark)
+        run: |
+          ffmpeg -y -loop 1 -t 18 -i in.jpg -i bgm.mp3 \
+            -filter_complex "[0:v]scale=2160:3840:force_original_aspect_ratio=increase,crop=2160:3840,setsar=1,zoompan=z='if(lt(on,120),1.0+0.6*on/120,if(lt(on,420),1.45+0.15*cos(2*PI*(on-120)/150),1.6-0.6*(on-420)/120))':d=540:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=720x1280:fps=30,eq=brightness=0.02:saturation=1.15:gamma=1.05,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='NOVA JEWELRY':fontcolor=white@0.75:fontsize=30:x=40:y=h-80,format=yuv420p,fade=t=out:st=16.8:d=1.2[v];[1:a]atrim=0:18,volume=0.9,afade=t=out:st=16.5:d=1.5[a]" \
+            -map "[v]" -map "[a]" \
+            -c:v libx264 -profile:v baseline -level 3.1 -pix_fmt yuv420p -movflags +faststart \
+            -c:a aac -b:a 128k -shortest out.mp4
+
+      - name: Upload MP4 to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          OUT_KEY: ${{ github.event.client_payload.out_key }}
+        run: |
+          aws s3 cp out.mp4 "s3://$R2_BUCKET/$OUT_KEY" --endpoint-url "$R2_ENDPOINT"
+          echo "Uploaded to s3://$R2_BUCKET/$OUT_KEY"
