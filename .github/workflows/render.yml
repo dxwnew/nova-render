@@ -27,12 +27,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
 
-      - name: Render 18s clip (push in / breathe / pull out + BGM + watermark)
+      - name: Render 2s static clip
         run: |
-          ffmpeg -y -loop 1 -t 18 -i in.jpg -i bgm.mp3 \
-            -filter_complex "[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,zoompan=z='if(lt(on,96),1.0+0.6*on/96,if(lt(on,336),1.45+0.15*cos(2*PI*(on-96)/120),1.6-0.6*(on-336)/96))':d=432:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=720x1280:fps=24,eq=brightness=0.02:saturation=1.15:gamma=1.05,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='NOVA JEWELRY':fontcolor=white@0.75:fontsize=24:x=30:y=h-60,format=yuv420p,fade=t=out:st=16.8:d=1.2[v];[1:a]atrim=0:18,volume=0.9,afade=t=out:st=16.5:d=1.5[a]" \
+          ffmpeg -y -loop 1 -t 2 -i in.jpg -i bgm.mp3 \
+            -filter_complex "[0:v]scale=720:1280,format=yuv420p[v];[1:a]atrim=0:2[a]" \
             -map "[v]" -map "[a]" \
-            -c:v libx264 -profile:v baseline -level 3.1 -pix_fmt yuv420p -movflags +faststart \
+            -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart \
             -c:a aac -b:a 128k -shortest out.mp4
 
       - name: Upload MP4 to R2
